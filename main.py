@@ -140,10 +140,25 @@ def main(args):
     trainer = pl.Trainer(
         accelerator="gpu",
         callbacks=callbacks,
-        check_val_every_n_epoch=config.val_interval_epoch,
-        devices=config.ngpus,
+        check_val_every_n_epoch=1,
+        # PyTorch Lightning sẽ tự động sử dụng tất cả các GPU có sẵn
+        # khi devices = -1 hoặc devices = số GPU bạn muốn
+        devices=config.ngpus, 
+        fast_dev_run=config.fast_dev_run,
+        gradient_clip_val=config.gradient_clip
+        if config.gradient_clip is not None
+        else 0,
+        limit_train_batches=1.0,
+        limit_val_batches=1.0,
+        logger=logger,
         max_epochs=config.epoch,
-        # ... các tham số khác của Trainer
+        num_sanity_val_steps=0,
+        reload_dataloaders_every_n_epochs=config.loader.reload_every_n_epoch
+        if config.loader.reload_every_n_epoch is not None
+        else config.epoch,
+        strategy="ddp",
+        sync_batchnorm=True,
+        val_check_interval=1.0,
     )
 
     if args.action == "train":
