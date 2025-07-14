@@ -26,12 +26,15 @@ class System(pl.LightningModule):
         self.configure_loss()
         self.save_hyperparameters()
 
+        # Khởi tạo thuộc tính để lưu output
+        self.validation_step_outputs = []
+        self.test_step_outputs = []
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.model(x)
-
         return out
 
-    def training_step(self, batch, batch_idx, dataloader_idx=-1):
+    def training_step(self, batch, batch_idx):
         embd_asv_enrol, embd_asv_test, embd_cm_test, label = batch
         pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
         loss = self.loss(pred, label)
@@ -43,20 +46,22 @@ class System(pl.LightningModule):
             prog_bar=True,
             logger=True,
         )
-
         return loss
 
-    def validation_step(self, batch, batch_idx, dataloader_idx=-1):
+    def validation_step(self, batch, batch_idx):
         embd_asv_enrol, embd_asv_test, embd_cm_test, key = batch
         pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
         pred = torch.softmax(pred, dim=-1)
-
+        # Lưu output vào list
+        self.validation_step_outputs.append({"pred": pred, "key": key})
         return {"pred": pred, "key": key}
 
-    def validation_epoch_end(self, outputs):
+    # Đổi tên từ validation_epoch_end -> on_validation_epoch_end
+    def on_validation_epoch_end(self):
         log_dict = {}
         preds, keys = [], []
-        for output in outputs:
+        # Lấy output từ list đã lưu
+        for output in self.validation_step_outputs:
             preds.append(output["pred"])
             keys.extend(list(output["key"]))
 
@@ -68,15 +73,21 @@ class System(pl.LightningModule):
         log_dict["spf_eer_dev"] = spf_eer
 
         self.log_dict(log_dict)
+        # Xóa list output sau khi đã dùng xong
+        self.validation_step_outputs.clear()
 
-    def test_step(self, batch, batch_idx, dataloader_idx=-1):
-        res_dict = self.validation_step(batch, batch_idx, dataloader_idx=dataloader_idx)
+    def test_step(self, batch, batch_idx):
+        res_dict = self.validation_step(batch, batch_idx)
+        # Lưu output cho test step
+        self.test_step_outputs.append(res_dict)
         return res_dict
 
-    def test_epoch_end(self, outputs):
+    # Đổi tên từ test_epoch_end -> on_test_epoch_end
+    def on_test_epoch_end(self):
         log_dict = {}
         preds, keys = [], []
-        for output in outputs:
+        # Lấy output từ list đã lưu
+        for output in self.test_step_outputs:
             preds.append(output["pred"])
             keys.extend(list(output["key"]))
 
@@ -88,6 +99,8 @@ class System(pl.LightningModule):
         log_dict["spf_eer_eval"] = spf_eer
 
         self.log_dict(log_dict)
+        # Xóa list output sau khi đã dùng xong
+        self.test_step_outputs.clear()
 
 
     def configure_optimizers(self):
@@ -97,7 +110,7 @@ class System(pl.LightningModule):
                 lr=self.config.optim.lr,
                 weight_decay=self.config.optim.wd,
             )
-        elif self.config.optimizer.lowe() == "sgd":
+        elif self.config.optimizer.lower() == "sgd":
             optimizer = torch.optim.SGD(
                 params=self.parameters(),
                 lr=self.config.optim.lr,
@@ -253,8 +266,7 @@ class System(pl.LightningModule):
             self.spk_meta_eval = pk.load(f)
 
     def load_embeddings(self):
-        """Tải các embedding và speaker model đã được lưu."""
-        # Tải embedding của countermeasure (CM)
+        # load saved countermeasures(CM) related preparations
         with open(self.config.dirs.embedding + "cm_embd_trn.pk", "rb") as f:
             self.cm_embd_trn = pk.load(f)
         with open(self.config.dirs.embedding + "cm_embd_dev.pk", "rb") as f:
@@ -262,7 +274,7 @@ class System(pl.LightningModule):
         with open(self.config.dirs.embedding + "cm_embd_eval.pk", "rb") as f:
             self.cm_embd_eval = pk.load(f)
 
-        # Tải embedding của automatic speaker verification (ASV)
+        # load saved automatic speaker verification(ASV) related preparations
         with open(self.config.dirs.embedding + "asv_embd_trn.pk", "rb") as f:
             self.asv_embd_trn = pk.load(f)
         with open(self.config.dirs.embedding + "asv_embd_dev.pk", "rb") as f:
@@ -270,8 +282,7 @@ class System(pl.LightningModule):
         with open(self.config.dirs.embedding + "asv_embd_eval.pk", "rb") as f:
             self.asv_embd_eval = pk.load(f)
 
-        # Tải speaker model cho tập dev và eval
-        # Lưu ý: tên file bây giờ là spk_model_dev.pk và spk_model_eval.pk
+        # load speaker models for development and evaluation sets
         with open(self.config.dirs.embedding + "spk_model_dev.pk", "rb") as f:
             self.spk_model_dev = pk.load(f)
         with open(self.config.dirs.embedding + "spk_model_eval.pk", "rb") as f:
