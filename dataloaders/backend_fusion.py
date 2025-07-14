@@ -9,6 +9,8 @@ class SASV_Trainset(Dataset):
         self.cm_embd = cm_embd
         self.asv_embd = asv_embd
         self.spk_meta = spk_meta
+        # Chuyển đổi keys thành list một lần duy nhất ở đây để tối ưu
+        self.spk_list = list(self.spk_meta.keys())
 
     def __len__(self):
         return len(self.cm_embd.keys())
@@ -17,24 +19,28 @@ class SASV_Trainset(Dataset):
 
         ans_type = random.randint(0, 1)
         if ans_type == 1:  # target
-            spk = random.choice(list(self.spk_meta.keys()))
+            spk = random.choice(self.spk_list)
+            # Đảm bảo có đủ 2 mẫu bonafide để lấy
+            while len(self.spk_meta[spk]["bonafide"]) < 2:
+                spk = random.choice(self.spk_list)
+            
             enr, tst = random.sample(self.spk_meta[spk]["bonafide"], 2)
 
         elif ans_type == 0:  # nontarget
             nontarget_type = random.randint(1, 2)
 
             if nontarget_type == 1:  # zero-effort nontarget
-                spk, ze_spk = random.sample(self.spk_meta.keys(), 2)
+                # SỬA Ở ĐÂY: Chuyển self.spk_meta.keys() thành list
+                spk, ze_spk = random.sample(self.spk_list, 2)
                 enr = random.choice(self.spk_meta[spk]["bonafide"])
                 tst = random.choice(self.spk_meta[ze_spk]["bonafide"])
 
             if nontarget_type == 2:  # spoof nontarget
-                spk = random.choice(list(self.spk_meta.keys()))
-                if len(self.spk_meta[spk]["spoof"]) == 0:
-                    while True:
-                        spk = random.choice(list(self.spk_meta.keys()))
-                        if len(self.spk_meta[spk]["spoof"]) != 0:
-                            break
+                spk = random.choice(self.spk_list)
+                # Xử lý trường hợp người nói không có mẫu spoof
+                while len(self.spk_meta[spk]["spoof"]) == 0:
+                    spk = random.choice(self.spk_list)
+                
                 enr = random.choice(self.spk_meta[spk]["bonafide"])
                 tst = random.choice(self.spk_meta[spk]["spoof"])
 
