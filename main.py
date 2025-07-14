@@ -63,11 +63,6 @@ def main(args):
         TQDMProgressBar(refresh_rate=config.progbar_refresh),
     ]
 
-    # Train / Evaluate
-    # gpus = find_gpus(config.ngpus, min_req_mem=config.min_req_mem)
-    # if gpus == -1:
-    #     raise ValueError("Required GPUs are not available")
-    # os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     trainer = pl.Trainer(
         accelerator="gpu",
         callbacks=callbacks,

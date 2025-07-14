@@ -48,20 +48,35 @@ class SASV_Trainset(Dataset):
 
 
 class SASV_DevEvalset(Dataset):
-    def __init__(self, utt_list, spk_model, asv_embd, cm_embd):
+    # Bỏ spk_model khỏi __init__
+    def __init__(self, utt_list, cm_embd, asv_embd):
         self.utt_list = utt_list
-        self.spk_model = spk_model
-        self.asv_embd = asv_embd
         self.cm_embd = cm_embd
+        self.asv_embd = asv_embd
 
     def __len__(self):
         return len(self.utt_list)
 
     def __getitem__(self, index):
-        line = self.utt_list[index]
-        spkmd, key, ans = line.strip().split(" ")
+        line = self.utt_list[index].strip()
+        parts = line.split(" ")
+        
+        # Chỉ xử lý định dạng: enroll_path test_path label
+        if len(parts) == 3 and '/' in parts[0]:
+            enroll_path, test_path, ans = parts
+        else:
+            return None, None, None, None # Bỏ qua các định dạng khác
 
-        return self.spk_model[spkmd], self.asv_embd[key], self.cm_embd[key], ans
+        # Lấy embedding của file enrollment trực tiếp từ asv_embd
+        enroll_emb = self.asv_embd.get(enroll_path)
+        asv_emb = self.asv_embd.get(test_path)
+        cm_emb = self.cm_embd.get(test_path)
+
+        # Kiểm tra xem có lấy được embedding không
+        if enroll_emb is None or asv_emb is None or cm_emb is None:
+            return None, None, None, None
+
+        return enroll_emb, asv_emb, cm_emb, ans
 
 
 def get_trnset(
@@ -73,8 +88,14 @@ def get_trnset(
 
 
 def get_dev_evalset(
-    utt_list: List, cm_embd: Dict, asv_embd: Dict, spk_model: Dict
+    utt_list: List, cm_embd: Dict, asv_embd: Dict
 ) -> SASV_DevEvalset:
+    # Bỏ spk_model khỏi lời gọi hàm
     return SASV_DevEvalset(
-        utt_list=utt_list, cm_embd=cm_embd, asv_embd=asv_embd, spk_model=spk_model
+        utt_list=utt_list, cm_embd=cm_embd, asv_embd=asv_embd
     )
+    
+def collate_fn(batch):
+    batch = [b for b in batch if b[0] is not None]
+    if not batch: return None, None, None, None
+    return list(zip(*batch))
