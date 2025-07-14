@@ -88,6 +88,9 @@ def embedding_pipeline(config: DictConfig):
 
 def main(args):
     config = OmegaConf.load(args.config)
+    if args.test_file:
+        print(f"THÔNG BÁO: Ghi đè đường dẫn test bằng file từ cờ lệnh: '{args.test_file}'")
+        config.dirs.sasv_eval_trial = args.test_file
     output_dir = Path(args.output_dir)
     pl.seed_everything(config.seed, workers=True)
 
@@ -180,5 +183,6 @@ if __name__ == "__main__":
     parser.add_argument("--action", type=str, choices=["train", "test"], required=True, help="Hành động cần thực hiện: 'train' hoặc 'test'")
     parser.add_argument("--output_dir", type=str, default="./exp_result", help="Thư mục lưu kết quả")
     parser.add_argument("--checkpoint_path", type=str, default=None, help="Đường dẫn đến model checkpoint để chạy test")
+    parser.add_argument("--test_file", type=str, default=None, help="Đường dẫn đến file trial để test, sẽ ghi đè lên file config.")
     
     main(parser.parse_args())
