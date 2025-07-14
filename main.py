@@ -64,15 +64,17 @@ def main(args):
     ]
 
     # Train / Evaluate
-    gpus = find_gpus(config.ngpus, min_req_mem=config.min_req_mem)
-    if gpus == -1:
-        raise ValueError("Required GPUs are not available")
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+    # gpus = find_gpus(config.ngpus, min_req_mem=config.min_req_mem)
+    # if gpus == -1:
+    #     raise ValueError("Required GPUs are not available")
+    # os.environ["CUDA_VISIBLE_DEVICES"] = gpus
     trainer = pl.Trainer(
         accelerator="gpu",
         callbacks=callbacks,
         check_val_every_n_epoch=1,
-        devices=config.ngpus,
+        # PyTorch Lightning sẽ tự động sử dụng tất cả các GPU có sẵn
+        # khi devices = -1 hoặc devices = số GPU bạn muốn
+        devices=config.ngpus, 
         fast_dev_run=config.fast_dev_run,
         gradient_clip_val=config.gradient_clip
         if config.gradient_clip is not None
@@ -87,7 +89,7 @@ def main(args):
         else config.epoch,
         strategy="ddp",
         sync_batchnorm=True,
-        val_check_interval=1.0,  # 0.25 validates 4 times every epoch
+        val_check_interval=1.0,
     )
 
     trainer.fit(system)
