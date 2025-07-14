@@ -59,7 +59,7 @@ class SASV_DevEvalset(Dataset):
 
     def __getitem__(self, index):
         line = self.utt_list[index]
-        spkmd, key, _, ans = line.strip().split(" ")
+        spkmd, key, ans = line.strip().split(" ")
 
         return self.spk_model[spkmd], self.asv_embd[key], self.cm_embd[key], ans
 
