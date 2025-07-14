@@ -9,7 +9,7 @@ from shutil import copy
 
 import pytorch_lightning as pl
 import torch
-from omegaconf import OmegaConf, DictConfig
+from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import TQDMProgressBar
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -17,7 +17,6 @@ from tqdm import tqdm
 # Import các thành phần cần thiết
 from ECAPATDNN.model import ECAPA_TDNN
 from aasist.models.AASIST import Model as AASISTModel
-# Sửa lại để import được các hàm từ utils.py
 from utils import generate_spk_meta, get_unique_files_from_trial, load_parameters
 from vlsp_dataset import VLSPDataset
 
@@ -27,11 +26,9 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 def embedding_pipeline(config: DictConfig):
     """
     Hàm chính để kiểm tra và trích xuất embedding nếu cần thiết.
-    Nó sẽ kiểm tra các file trong đường dẫn được chỉ định bởi sasv_eval_trial.
     """
     print("--- 🕵️ Bắt đầu kiểm tra và cập nhật embedding ---")
     eval_trial_path = config.dirs.sasv_eval_trial
-    # Thư mục chứa file public test
     public_test_base_dir = "/kaggle/input/vlsp-vsasv-public-test/vlsp2025/vlsp2025/"
 
     required_files = get_unique_files_from_trial(eval_trial_path)
@@ -39,18 +36,15 @@ def embedding_pipeline(config: DictConfig):
         print(f"-> Không tìm thấy file trial tại '{eval_trial_path}' hoặc file rỗng. Bỏ qua.")
         return
 
-    # Tải các embedding hiện có của tập eval
     asv_embd_path = Path(config.dirs.embedding) / "asv_embd_eval.pk"
     cm_embd_path = Path(config.dirs.embedding) / "cm_embd_eval.pk"
     
-    asv_embs = {}
-    cm_embs = {}
+    asv_embs, cm_embs = {}, {}
     if os.path.exists(asv_embd_path):
         with open(asv_embd_path, 'rb') as f: asv_embs = pk.load(f)
     if os.path.exists(cm_embd_path):
         with open(cm_embd_path, 'rb') as f: cm_embs = pk.load(f)
 
-    # Tìm những file bị thiếu
     missing_files = [f for f in required_files if f not in asv_embs]
     
     if not missing_files:
@@ -59,7 +53,6 @@ def embedding_pipeline(config: DictConfig):
         
     print(f"-> ❗️ Phát hiện {len(missing_files)} file chưa có embedding. Bắt đầu trích xuất...")
 
-    # --- Khởi tạo mô hình và chạy embedding cho các file bị thiếu ---
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
     with open("./aasist/config/AASIST.conf", "r") as f_json:
@@ -85,7 +78,6 @@ def embedding_pipeline(config: DictConfig):
                 new_asv_embs[k] = asv
                 new_cm_embs[k] = cm
 
-    # Cập nhật và lưu lại file .pk
     asv_embs.update(new_asv_embs)
     cm_embs.update(new_cm_embs)
     with open(asv_embd_path, 'wb') as f: pk.dump(asv_embs, f)
@@ -99,11 +91,24 @@ def main(args):
     output_dir = Path(args.output_dir)
     pl.seed_everything(config.seed, workers=True)
 
-    # Nếu đang ở chế độ test, hãy kiểm tra và embedding nếu cần
+    # ==================== THÊM LẠI LOGIC TẠI ĐÂY ====================
+    # Luôn kiểm tra và tạo file meta nếu cần thiết, bất kể là train hay test
+    print("--- 🔍 Kiểm tra các file metadata của người nói ---")
+    if not (
+        os.path.exists(config.dirs.spk_meta + "spk_meta_trn.pk")
+        and os.path.exists(config.dirs.spk_meta + "spk_meta_dev.pk")
+        and os.path.exists(config.dirs.spk_meta + "spk_meta_eval.pk")
+    ):
+        print("-> Một vài file metadata bị thiếu. Bắt đầu tạo...")
+        generate_spk_meta(config)
+        print("-> Đã tạo xong file metadata.")
+    else:
+        print("-> Các file metadata đã đầy đủ.")
+    # ===============================================================
+
     if args.action == "test":
         embedding_pipeline(config)
 
-    # configure paths
     model_tag = os.path.splitext(os.path.basename(args.config))[0]
     model_tag = output_dir / model_tag
     model_save_path = model_tag / "weights"
@@ -115,7 +120,6 @@ def main(args):
     _system = getattr(_system, "System")
     system = _system(config)
 
-    # Configure logging and callbacks
     logger = [
         pl.loggers.TensorBoardLogger(save_dir=model_tag, version=1, name="tsbd_logs"),
         pl.loggers.csv_logs.CSVLogger(save_dir=model_tag, version=1, name="csv_logs"),
