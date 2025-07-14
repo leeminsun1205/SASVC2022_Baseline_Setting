@@ -253,7 +253,8 @@ class System(pl.LightningModule):
             self.spk_meta_eval = pk.load(f)
 
     def load_embeddings(self):
-        # load saved countermeasures(CM) related preparations
+        """Tải các embedding và speaker model đã được lưu."""
+        # Tải embedding của countermeasure (CM)
         with open(self.config.dirs.embedding + "cm_embd_trn.pk", "rb") as f:
             self.cm_embd_trn = pk.load(f)
         with open(self.config.dirs.embedding + "cm_embd_dev.pk", "rb") as f:
@@ -261,7 +262,7 @@ class System(pl.LightningModule):
         with open(self.config.dirs.embedding + "cm_embd_eval.pk", "rb") as f:
             self.cm_embd_eval = pk.load(f)
 
-        # load saved automatic speaker verification(ASV) related preparations
+        # Tải embedding của automatic speaker verification (ASV)
         with open(self.config.dirs.embedding + "asv_embd_trn.pk", "rb") as f:
             self.asv_embd_trn = pk.load(f)
         with open(self.config.dirs.embedding + "asv_embd_dev.pk", "rb") as f:
@@ -269,7 +270,8 @@ class System(pl.LightningModule):
         with open(self.config.dirs.embedding + "asv_embd_eval.pk", "rb") as f:
             self.asv_embd_eval = pk.load(f)
 
-        # load speaker models for development and evaluation sets
+        # Tải speaker model cho tập dev và eval
+        # Lưu ý: tên file bây giờ là spk_model_dev.pk và spk_model_eval.pk
         with open(self.config.dirs.embedding + "spk_model_dev.pk", "rb") as f:
             self.spk_model_dev = pk.load(f)
         with open(self.config.dirs.embedding + "spk_model_eval.pk", "rb") as f:

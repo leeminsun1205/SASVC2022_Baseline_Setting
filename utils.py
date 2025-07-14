@@ -117,23 +117,18 @@ def find_gpus(nums=4, min_req_mem=None) -> str:
 
 
 def get_spkdic(cm_meta: str) -> Dict:
+    """
+    Tạo một từ điển chứa thông tin về người nói từ tệp protocol.
+    Định dạng tệp đầu vào: speaker_id filepath label
+    """
     l_cm_meta = open(cm_meta, "r").readlines()
 
     d_spk = {}
-    # dictionary of speakers
-    # d_spk : {
-    #   'spk_id1':{
-    #       'bonafide': [utt1, utt2],
-    #       'spoof': [utt5]
-    #   },
-    #   'spk_id2':{
-    #       'bonafide': [utt3, utt4, utt8],
-    #       'spoof': [utt6, utt7]
-    #   } ...
-    # }
 
     for line in l_cm_meta:
-        spk, filename, _, _, ans = line.strip().split(" ")
+        # Tệp protocol mới có 3 cột
+        spk, filename, ans = line.strip().split(" ")
+        
         if spk not in d_spk:
             d_spk[spk] = {}
             d_spk[spk]["bonafide"] = []
@@ -148,12 +143,13 @@ def get_spkdic(cm_meta: str) -> Dict:
 
 
 def generate_spk_meta(config) -> None:
+    # Sử dụng đường dẫn từ tệp config mới
     d_spk_train = get_spkdic(config.dirs.cm_trn_list)
     d_spk_dev = get_spkdic(config.dirs.cm_dev_list)
     d_spk_eval = get_spkdic(config.dirs.cm_eval_list)
     os.makedirs(config.dirs.spk_meta, exist_ok=True)
 
-    # save speaker dictionaries
+    # Lưu các từ điển người nói
     with open(config.dirs.spk_meta + "spk_meta_trn.pk", "wb") as f:
         pk.dump(d_spk_train, f)
     with open(config.dirs.spk_meta + "spk_meta_dev.pk", "wb") as f:
