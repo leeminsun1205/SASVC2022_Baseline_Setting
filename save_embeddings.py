@@ -137,6 +137,8 @@ def main():
     # Tải mô hình ASV (ECAPA-TDNN)
     asv_embd_ext = ECAPA_TDNN(C=1024)
     load_parameters(asv_embd_ext.state_dict(), args.ecapa_weight)
+    asv_embd_ext.to(device)
+    asv_embd_ext.torchfbank[0].flipped_filter = asv_embd_ext.torchfbank[0].flipped_filter.to(device)
     asv_embd_ext.eval()
     
     # Trích xuất embeddings cho các tập trn, dev, eval
