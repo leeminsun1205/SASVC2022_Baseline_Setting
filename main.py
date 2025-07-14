@@ -9,7 +9,7 @@ from shutil import copy
 
 import pytorch_lightning as pl
 import torch
-from omegaconf import OmegaConf
+from omegaconf import OmegaConf, DictConfig
 from pytorch_lightning.callbacks import TQDMProgressBar
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -24,7 +24,7 @@ from vlsp_dataset import VLSPDataset
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
-def embedding_pipeline(config: OmegaConf.dictconfig.DictConfig):
+def embedding_pipeline(config: DictConfig):
     """
     Hàm chính để kiểm tra và trích xuất embedding nếu cần thiết.
     Nó sẽ kiểm tra các file trong đường dẫn được chỉ định bởi sasv_eval_trial.
