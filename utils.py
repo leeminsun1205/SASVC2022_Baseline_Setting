@@ -156,3 +156,21 @@ def generate_spk_meta(config) -> None:
         pk.dump(d_spk_dev, f)
     with open(config.dirs.spk_meta + "spk_meta_eval.pk", "wb") as f:
         pk.dump(d_spk_eval, f)
+
+def get_unique_files_from_trial(trial_file: str) -> list:
+    """
+    Đọc một file trial và trả về một danh sách các đường dẫn file âm thanh duy nhất.
+    Xử lý cả định dạng 2 cột (enroll test) và 3 cột (enroll test label).
+    """
+    if not os.path.exists(trial_file):
+        return []
+    
+    unique_files = set()
+    with open(trial_file, 'r', encoding='utf-8') as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 2:
+                # Chỉ lấy 2 phần tử đầu tiên và chỉ thêm nếu nó là đường dẫn file
+                if '/' in parts[0]: unique_files.add(parts[0])
+                if '/' in parts[1]: unique_files.add(parts[1])
+    return list(unique_files)

@@ -89,36 +89,60 @@ class System(pl.LightningModule):
         self.validation_step_outputs.clear()
 
     def test_step(self, batch, batch_idx):
-        if batch[0] is None:
-            return None
-            
-        # Tái sử dụng logic của validation_step
-        res_dict = self.validation_step(batch, batch_idx)
-        if res_dict:
-            # Ghi đè list lưu trữ để không bị lẫn lộn
-            self.validation_step_outputs.pop() # Xóa output vừa được thêm bởi validation_step
-            self.test_step_outputs.append(res_dict)
-        return res_dict
+        if batch[0] is None: return None
+        
+        embd_asv_enrol, embd_asv_test, embd_cm_test, key = batch
+        pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
+        score = torch.softmax(pred, dim=-1)[:, 1]
+
+        enroll_paths, test_paths, ans_keys = key
+        
+        output = {
+            "score": score, 
+            "enroll_path": enroll_paths, 
+            "test_path": test_paths, 
+            "key": ans_keys
+        }
+        self.test_step_outputs.append(output)
+        return output
 
     def on_test_epoch_end(self):
         if not self.test_step_outputs:
             print("Cảnh báo: Không có output nào trong vòng test để xử lý.")
             return
 
-        log_dict = {}
-        preds, keys = [], []
-        for output in self.test_step_outputs:
-            preds.append(output["pred"])
-            keys.extend(list(output["key"]))
+        submission_file_path = "submission.txt"
+        print(f"\n✍️  Bắt đầu ghi file submission vào: {submission_file_path}")
+        
+        with open(submission_file_path, "w") as f:
+            f.write("enrollment_wav\ttest_wav\tscore\n")
+            for output in self.test_step_outputs:
+                scores, enrolls, tests = output["score"], output["enroll_path"], output["test_path"]
+                for i in range(len(scores)):
+                    f.write(f"{enrolls[i]}\t{tests[i]}\t{scores[i].item()}\n")
+                    
+        print(f"-> ✅ Đã ghi xong file submission!")
 
-        preds = torch.cat(preds, dim=0)[:, 1].detach().cpu().numpy()
-        sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
+        # Phần tính EER chỉ chạy nếu có nhãn hợp lệ
+        keys, preds = [], []
+        has_valid_labels = any(k != 'public_test' for output in self.test_step_outputs for k in output["key"])
 
-        log_dict["sasv_eer_eval"] = sasv_eer
-        log_dict["sv_eer_eval"] = sv_eer
-        log_dict["spf_eer_eval"] = spf_eer
+        if has_valid_labels:
+            print("\n📊 Phát hiện có nhãn hợp lệ, đang tính toán EER...")
+            for output in self.test_step_outputs:
+                valid_indices = [i for i, k in enumerate(output["key"]) if k != 'public_test']
+                if valid_indices:
+                    preds.append(output["score"][valid_indices])
+                    keys.extend([output["key"][i] for i in valid_indices])
+            
+            if preds:
+                log_dict = {}
+                preds = torch.cat(preds, dim=0).detach().cpu().numpy()
+                sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
+                log_dict["sasv_eer_eval"] = sasv_eer
+                self.log_dict(log_dict)
+                print(f"-> EER trên tập đánh giá có nhãn: {sasv_eer:.4f}")
 
-        self.log_dict(log_dict)
         self.test_step_outputs.clear()
 
 
