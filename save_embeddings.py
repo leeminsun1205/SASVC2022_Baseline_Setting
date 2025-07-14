@@ -19,9 +19,9 @@ SET_PARTITION = ["trn", "dev", "eval"]
 
 # list of countermeasure(CM) protocols
 SET_CM_PROTOCOL = {
-    "trn": "protocols/ASVspoof2019.LA.cm.train.trn.txt",
-    "dev": "protocols/ASVspoof2019.LA.cm.dev.trl.txt",
-    "eval": "protocols/ASVspoof2019.LA.cm.eval.trl.txt",
+    "trn": "protocols/train_split.txt",
+    "dev": "protocols/dev_split.txt",
+    "eval": "protocols/eval_split.txt",
 }
 
 BASE_DIR = "/kaggle/input/vlsp-vsasv-datasets/vlsp2025/"
