@@ -35,7 +35,7 @@ def save_embeddings(set_name, cm_embd_ext, asv_embd_ext, device):
     utt_list = [line.strip().split(" ")[1] for line in meta_lines]
 
     dataset = VLSPDataset(file_paths=utt_list, base_dir=BASE_DIR)
-    loader = DataLoader(dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True, num_workers=4)
 
     cm_emb_dic = {}
     asv_emb_dic = {}
@@ -82,7 +82,7 @@ def save_models(set_name, asv_embd_ext, device):
     all_utts = [utt for utts in spk_utt_dic.values() for utt in utts]
     
     dataset = VLSPDataset(file_paths=all_utts, base_dir=BASE_DIR)
-    loader = DataLoader(dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True)
+    loader = DataLoader(dataset, batch_size=30, shuffle=False, drop_last=False, pin_memory=True, num_workers=4)
     
     utt_emb_dic = {}
     print(f"Trích xuất embedding để tạo speaker models...")
