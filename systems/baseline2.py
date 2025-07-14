@@ -94,6 +94,8 @@ class System(pl.LightningModule):
         embd_asv_enrol, embd_asv_test, embd_cm_test, key = batch
         pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
         score = torch.softmax(pred, dim=-1)[:, 1]
+        print(">>> key:", key)
+        print(">>> len(key):", len(key))
 
         enroll_paths, test_paths, ans_keys = key
         
