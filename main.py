@@ -4,7 +4,7 @@ import warnings
 from importlib import import_module
 from pathlib import Path
 from shutil import copy
-
+from pytorch_lightning.callbacks import TQDMProgressBar
 import pytorch_lightning as pl
 from omegaconf import OmegaConf
 
@@ -60,6 +60,7 @@ def main(args):
             every_n_epochs=config.val_interval_epoch,
             save_top_k=config.save_top_k,
         ),
+        TQDMProgressBar(refresh_rate=config.progbar_refresh),
     ]
 
     # Train / Evaluate
@@ -81,7 +82,6 @@ def main(args):
         logger=logger,
         max_epochs=config.epoch,
         num_sanity_val_steps=0,
-        progress_bar_refresh_rate=config.progbar_refresh,  # 0 to disable
         reload_dataloaders_every_n_epochs=config.loader.reload_every_n_epoch
         if config.loader.reload_every_n_epoch is not None
         else config.epoch,
