@@ -153,8 +153,6 @@ class System(pl.LightningModule):
             self.spk_meta_dev = pk.load(f)
         with open(self.config.dirs.spk_meta + "spk_meta_eval.pk", "rb") as f:
             self.spk_meta_eval = pk.load(f)
-        with open(self.config.dirs.spk_meta + "spk_meta_public_test.pk", "rb") as f:
-            self.spk_meta_public_test = pk.load(f) 
             
     def load_embeddings(self):
         # load saved countermeasures(CM) related preparations
