@@ -3,7 +3,7 @@ import pickle as pk
 import random
 import sys
 from typing import Dict
-from dataloaders.backend_fusion import collate_fn
+from dataloaders.backend_fusion import collate_fn, SASV_SubmissionSet
 import numpy as np
 import torch
 import torch.nn as nn
@@ -197,7 +197,7 @@ def generate_submission(system, trial_path: str, output_path: str):
         trials = [line.strip() for line in f if line.strip()]
 
     # Tạo dataset và dataloader
-    dataset = system.ds_func_eval(trials, system.cm_embd_public_test, system.asv_embd_public_test)
+    dataset = SASV_SubmissionSet(trials, system.cm_embd_public_test, system.asv_embd_public_test)
     loader = DataLoader(
         dataset,
         batch_size=32,
@@ -231,7 +231,11 @@ def generate_submission(system, trial_path: str, output_path: str):
 
             # Ghi kết quả
             for key, score in zip(keys, pred):
-                enr, tst = key.split(" ")
+                parts = key.strip().split()
+                if len(parts) != 2:
+                    print(f"⚠️  Bỏ qua key không hợp lệ: '{key}'")
+                    continue
+                enr, tst = parts
                 results.append(f"{enr}\t{tst}\t{score:.5f}")
 
     # Ghi file kết quả

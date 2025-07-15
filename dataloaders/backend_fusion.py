@@ -66,6 +66,27 @@ class SASV_DevEvalset(Dataset):
 
         return enroll_emb, asv_emb, cm_emb, ans
 
+class SASV_SubmissionSet(Dataset):
+    def __init__(self, utt_list, cm_embd, asv_embd):
+        self.utt_list = utt_list
+        self.cm_embd = cm_embd
+        self.asv_embd = asv_embd
+
+    def __getitem__(self, index):
+        line = self.utt_list[index].strip()
+        parts = line.split()
+        if len(parts) != 2:
+            return None
+
+        enroll_path, test_path = parts
+        enroll_emb = self.asv_embd.get(enroll_path)
+        asv_emb = self.asv_embd.get(test_path)
+        cm_emb = self.cm_embd.get(test_path)
+
+        if enroll_emb is None or asv_emb is None or cm_emb is None:
+            return None
+
+        return enroll_emb, asv_emb, cm_emb, f"{enroll_path} {test_path}"
 
 def get_trnset(cm_embd_trn: Dict, asv_embd_trn: Dict, spk_meta_trn: Dict) -> SASV_Trainset:
     return SASV_Trainset(
