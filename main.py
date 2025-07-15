@@ -170,11 +170,27 @@ def main(args):
     elif args.action == "test":
         if args.checkpoint_path is None:
             raise ValueError("Vui lòng cung cấp --checkpoint_path khi chạy submit.")
-        trainer.test(system, ckpt_path=args.checkpoint_path) 
+        # Load model từ checkpoint (không chạy test_dataloader)
+        system = _system.load_from_checkpoint(args.checkpoint_path, config=config)
+
+        # Gọi setup để system.ds_func_eval sẵn sàng (nếu generate_submission cần dùng)
+        system.setup(stage="test")
+
+        # Load embedding public test (chỉ khi generate_submission cần)
+        with open(config.dirs.embedding + "cm_embd_public_test.pk", "rb") as f:
+            system.cm_embd_public_test = pk.load(f)
+        with open(config.dirs.embedding + "asv_embd_public_test.pk", "rb") as f:
+            system.asv_embd_public_test = pk.load(f)
+
+        # Ghi đè trial nếu bạn dùng --test_file
+        if args.test_file:
+            config.dirs.sasv_eval_trial = args.test_file
+
+        # Gọi hàm tạo file submission
         submission_output_path = str(model_tag / "submission_task1.txt")
         generate_submission(
             system=system,
-            trial_path=config.dirs.sasv_public_test_trial,
+            trial_path=config.dirs.sasv_eval_trial,
             output_path=submission_output_path
         )
 
