@@ -72,6 +72,9 @@ class SASV_SubmissionSet(Dataset):
         self.cm_embd = cm_embd
         self.asv_embd = asv_embd
 
+    def __len__(self):
+        return len(self.utt_list)
+    
     def __getitem__(self, index):
         line = self.utt_list[index].strip()
         parts = line.split()
