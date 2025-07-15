@@ -189,7 +189,7 @@ def main(args):
         submission_output_path = str(model_tag / "submission_task1.txt")
         generate_submission(
             system=system,
-            trial_path=config.dirs.sasv_eval_trial,
+            trial_path=config.dirs.sasv_public_test_trial,
             output_path=submission_output_path
         )
 

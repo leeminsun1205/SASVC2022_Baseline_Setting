@@ -2,6 +2,7 @@ import os
 import pickle as pk
 import random
 import sys
+from tqdm import tqdm
 from typing import Dict
 from dataloaders.backend_fusion import collate_fn, SASV_SubmissionSet
 import numpy as np
@@ -186,13 +187,7 @@ def get_unique_files_from_trial(trial_file: str) -> list:
     return list(unique_files)
 
 def generate_submission(system, trial_path: str, output_path: str):
-    import torch
-    import os
-    from torch.utils.data import DataLoader
-    from tqdm import tqdm
-    from dataloaders.backend_fusion import collate_fn  # đảm bảo bạn đã import collate_fn
 
-    # Đọc danh sách trial (không nhãn)
     with open(trial_path, "r") as f:
         trials = [line.strip() for line in f if line.strip()]
     print("▶️ Số dòng trong trial:", len(trials))
