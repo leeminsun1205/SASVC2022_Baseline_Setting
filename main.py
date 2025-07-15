@@ -13,6 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 from pytorch_lightning.callbacks import TQDMProgressBar
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from utils import generate_submission
 
 # Import các thành phần cần thiết
 from ECAPATDNN.model import ECAPA_TDNN
@@ -24,9 +25,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 
 def embedding_pipeline(config: DictConfig):
-    """
-    Hàm chính để kiểm tra và trích xuất embedding nếu cần thiết.
-    """
+
     print("--- 🕵️ Bắt đầu kiểm tra và cập nhật embedding ---")
     eval_trial_path = config.dirs.sasv_eval_trial
     public_test_base_dir = "/kaggle/input/vlsp-vsasv-public-test/vlsp2025/vlsp2025/"
@@ -36,8 +35,8 @@ def embedding_pipeline(config: DictConfig):
         print(f"-> Không tìm thấy file trial tại '{eval_trial_path}' hoặc file rỗng. Bỏ qua.")
         return
 
-    asv_embd_path = Path(config.dirs.embedding) / "asv_embd_eval.pk"
-    cm_embd_path = Path(config.dirs.embedding) / "cm_embd_eval.pk"
+    asv_embd_path = Path(config.dirs.embedding) / "asv_embd_public_test.pk"
+    cm_embd_path = Path(config.dirs.embedding) / "cm_embd_public_test.pk"
     
     asv_embs, cm_embs = {}, {}
     if os.path.exists(asv_embd_path):
@@ -94,8 +93,6 @@ def main(args):
     output_dir = Path(args.output_dir)
     pl.seed_everything(config.seed, workers=True)
 
-    # ==================== THÊM LẠI LOGIC TẠI ĐÂY ====================
-    # Luôn kiểm tra và tạo file meta nếu cần thiết, bất kể là train hay test
     print("--- 🔍 Kiểm tra các file metadata của người nói ---")
     if not (
         os.path.exists(config.dirs.spk_meta + "spk_meta_trn.pk")
@@ -107,7 +104,6 @@ def main(args):
         print("-> Đã tạo xong file metadata.")
     else:
         print("-> Các file metadata đã đầy đủ.")
-    # ===============================================================
 
     if args.action == "test":
         embedding_pipeline(config)
@@ -173,8 +169,14 @@ def main(args):
         trainer.test(system, ckpt_path="best")
     elif args.action == "test":
         if args.checkpoint_path is None:
-            raise ValueError("Vui lòng cung cấp đường dẫn đến checkpoint với cờ --checkpoint_path khi chạy test.")
-        trainer.test(system, ckpt_path=args.checkpoint_path)
+            raise ValueError("Vui lòng cung cấp --checkpoint_path khi chạy submit.")
+        trainer.test(system, ckpt_path=args.checkpoint_path) 
+        submission_output_path = str(model_tag / "submission_task1.txt")
+        generate_submission(
+            system=system,
+            trial_path=config.dirs.sasv_public_test_trial,
+            output_path=submission_output_path
+        )
 
 
 if __name__ == "__main__":

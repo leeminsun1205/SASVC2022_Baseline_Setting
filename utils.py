@@ -2,11 +2,13 @@ import os
 import pickle as pk
 import random
 import sys
-from typing import Dict, List
-
+from typing import Dict
+from dataloaders.backend_fusion import collate_fn
 import numpy as np
 import torch
 import torch.nn as nn
+from torch.utils.data import DataLoader
+
 
 
 def str_to_bool(val):
@@ -117,16 +119,30 @@ def find_gpus(nums=4, min_req_mem=None) -> str:
 
 
 def get_spkdic(cm_meta: str) -> Dict:
+    
     """
-    Tạo một từ điển chứa thông tin về người nói từ tệp protocol.
-    Định dạng tệp đầu vào: speaker_id filepath label
+    return:
+    {
+        'S001': {
+            'bonafide': ['LA_000001-F-0010001.wav', 'LA_000003-F-0010003.wav'],
+            'spoof': []
+        },
+        'S002': {
+            'bonafide': ['LA_000005-F-0010005.wav'],
+            'spoof': ['LA_000002-F-0010002.wav']
+        },
+        'S003': {
+            'bonafide': [],
+            'spoof': ['LA_000004-F-0010004.wav']
+        }
+    }
     """
+    
     l_cm_meta = open(cm_meta, "r").readlines()
 
     d_spk = {}
 
     for line in l_cm_meta:
-        # Tệp protocol mới có 3 cột
         spk, filename, ans = line.strip().split(" ")
         
         if spk not in d_spk:
@@ -143,13 +159,11 @@ def get_spkdic(cm_meta: str) -> Dict:
 
 
 def generate_spk_meta(config) -> None:
-    # Sử dụng đường dẫn từ tệp config mới
     d_spk_train = get_spkdic(config.dirs.cm_trn_list)
     d_spk_dev = get_spkdic(config.dirs.cm_dev_list)
     d_spk_eval = get_spkdic(config.dirs.cm_eval_list)
     os.makedirs(config.dirs.spk_meta, exist_ok=True)
 
-    # Lưu các từ điển người nói
     with open(config.dirs.spk_meta + "spk_meta_trn.pk", "wb") as f:
         pk.dump(d_spk_train, f)
     with open(config.dirs.spk_meta + "spk_meta_dev.pk", "wb") as f:
@@ -158,10 +172,6 @@ def generate_spk_meta(config) -> None:
         pk.dump(d_spk_eval, f)
 
 def get_unique_files_from_trial(trial_file: str) -> list:
-    """
-    Đọc một file trial và trả về một danh sách các đường dẫn file âm thanh duy nhất.
-    Xử lý cả định dạng 2 cột (enroll test) và 3 cột (enroll test label).
-    """
     if not os.path.exists(trial_file):
         return []
     
@@ -170,7 +180,43 @@ def get_unique_files_from_trial(trial_file: str) -> list:
         for line in f:
             parts = line.strip().split()
             if len(parts) >= 2:
-                # Chỉ lấy 2 phần tử đầu tiên và chỉ thêm nếu nó là đường dẫn file
                 if '/' in parts[0]: unique_files.add(parts[0])
                 if '/' in parts[1]: unique_files.add(parts[1])
     return list(unique_files)
+
+def generate_submission(system, trial_path: str, output_path: str):
+
+    with open(trial_path, "r") as f:
+        trials = [line.strip() for line in f if line.strip()]
+
+    dataset = system.ds_func_eval(trials, system.cm_embd_public_test, system.asv_embd_public_test)
+    loader = DataLoader(
+        dataset,
+        batch_size=32,
+        shuffle=False,
+        drop_last=False,
+        num_workers=system.config.loader.n_workers,
+        collate_fn=collate_fn
+    )
+
+    system.eval()
+    results = []
+
+    with torch.no_grad():
+        for batch in loader:
+            if batch[0] is None:
+                continue
+            embd_asv_enrol, embd_asv_test, embd_cm_test, keys = batch
+            pred = system.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
+            pred = torch.softmax(pred, dim=-1)[:, 1].detach().cpu().numpy()
+
+            for key, score in zip(keys, pred):
+                enr, tst = key.split(" ")  
+                results.append(f"{enr}\t{tst}\t{score:.5f}")
+
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    with open(output_path, "w") as f:
+        f.write("enrollment_wav\ttest_wav\tscore\n")  # header
+        f.write("\n".join(results) + "\n")
+
+    print(f"✅ Submission saved to {output_path} with {len(results)} entries.")

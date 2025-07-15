@@ -67,35 +67,29 @@ class SASV_DevEvalset(Dataset):
         return enroll_emb, asv_emb, cm_emb, ans
 
 
-def get_trnset(
-    cm_embd_trn: Dict, asv_embd_trn: Dict, spk_meta_trn: Dict
-) -> SASV_Trainset:
+def get_trnset(cm_embd_trn: Dict, asv_embd_trn: Dict, spk_meta_trn: Dict) -> SASV_Trainset:
     return SASV_Trainset(
-        cm_embd=cm_embd_trn, asv_embd=asv_embd_trn, spk_meta=spk_meta_trn
+        cm_embd=cm_embd_trn, 
+        asv_embd=asv_embd_trn, 
+        spk_meta=spk_meta_trn
     )
 
 
-def get_dev_evalset(
-    utt_list: List, cm_embd: Dict, asv_embd: Dict
-) -> SASV_DevEvalset:
+def get_dev_evalset(utt_list: List, cm_embd: Dict, asv_embd: Dict) -> SASV_DevEvalset:
     return SASV_DevEvalset(
-        utt_list=utt_list, cm_embd=cm_embd, asv_embd=asv_embd
+        utt_list=utt_list, 
+        cm_embd=cm_embd, 
+        asv_embd=asv_embd
     )
 
 def collate_fn(batch):
-    """
-    SỬA LỖI Ở ĐÂY:
-    Hàm đóng gói dữ liệu tùy chỉnh. Sẽ xếp chồng các mảng numpy thành Tensor.
-    """
-    # Lọc ra các mẫu không hợp lệ (None)
+
     batch = [b for b in batch if b is not None]
     if not batch:
         return None, None, None, None
 
-    # Unzip batch đã được lọc
     enroll_embs, asv_embs, cm_embs, keys = zip(*batch)
     
-    # Xếp chồng các mảng numpy thành một Tensor duy nhất
     enroll_embs = torch.from_numpy(np.stack(enroll_embs, axis=0))
     asv_embs = torch.from_numpy(np.stack(asv_embs, axis=0))
     cm_embs = torch.from_numpy(np.stack(cm_embs, axis=0))

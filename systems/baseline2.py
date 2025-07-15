@@ -4,14 +4,13 @@ import pickle as pk
 from importlib import import_module
 from typing import Any
 
-import omegaconf
+from omegaconf.dictconfig import DictConfig
 import pytorch_lightning as pl
 import schedulers as lr_schedulers
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-# Dòng import bị thiếu
 from dataloaders.backend_fusion import collate_fn
 
 from metrics import get_all_EERs
@@ -19,9 +18,10 @@ from utils import keras_decay
 
 
 class System(pl.LightningModule):
-    def __init__(
-        self, config: omegaconf.dictconfig.DictConfig, *args: Any, **kwargs: Any
-    ) -> None:
+    
+    # ========== 1. Khởi tạo & cấu hình ==========
+    
+    def __init__( self, config: DictConfig, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.config = config
         _model = import_module("models.{}".format(config.model_arch))
@@ -30,100 +30,28 @@ class System(pl.LightningModule):
         self.configure_loss()
         self.save_hyperparameters()
 
-        # Khởi tạo thuộc tính để lưu output
         self.validation_step_outputs = []
         self.test_step_outputs = []
-
+        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.model(x)
         return out
+        
+    def setup(self, stage=None):
+        self.load_meta_information()
+        self.load_embeddings()
 
-    def training_step(self, batch, batch_idx):
-        # Kiểm tra xem batch có hợp lệ không (do collate_fn có thể trả về None)
-        if batch[0] is None:
-            return None
-            
-        embd_asv_enrol, embd_asv_test, embd_cm_test, label = batch
-        pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
-        loss = self.loss(pred, label)
-        self.log(
-            "trn_loss",
-            loss,
-            on_step=True,
-            on_epoch=True,
-            prog_bar=True,
-            logger=True,
-        )
-        return loss
-
-    def validation_step(self, batch, batch_idx):
-        if batch[0] is None:
-            return None
-            
-        embd_asv_enrol, embd_asv_test, embd_cm_test, key = batch
-        pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
-        pred = torch.softmax(pred, dim=-1)
-        output = {"pred": pred, "key": key}
-        self.validation_step_outputs.append(output)
-        return output
-
-    def on_validation_epoch_end(self):
-        if not self.validation_step_outputs:
-            print("Cảnh báo: Không có output nào trong vòng validation để xử lý.")
-            return
-
-        log_dict = {}
-        preds, keys = [], []
-        for output in self.validation_step_outputs:
-            preds.append(output["pred"])
-            keys.extend(list(output["key"]))
-
-        preds = torch.cat(preds, dim=0)[:, 1].detach().cpu().numpy()
-        sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
-
-        log_dict["sasv_eer_dev"] = sasv_eer
-        log_dict["sv_eer_dev"] = sv_eer
-        log_dict["spf_eer_dev"] = spf_eer
-
-        self.log_dict(log_dict)
-        self.validation_step_outputs.clear()
-
-    def test_step(self, batch, batch_idx):
-        if batch[0] is None:
-            return None
-            
-        # Tái sử dụng logic của validation_step
-        res_dict = self.validation_step(batch, batch_idx)
-        if res_dict:
-            # Ghi đè list lưu trữ để không bị lẫn lộn
-            self.validation_step_outputs.pop() # Xóa output vừa được thêm bởi validation_step
-            self.test_step_outputs.append(res_dict)
-        return res_dict
-
-    def on_test_epoch_end(self):
-        if not self.test_step_outputs:
-            print("Cảnh báo: Không có output nào trong vòng test để xử lý.")
-            return
-
-        log_dict = {}
-        preds, keys = [], []
-        for output in self.test_step_outputs:
-            preds.append(output["pred"])
-            keys.extend(list(output["key"]))
-
-        preds = torch.cat(preds, dim=0)[:, 1].detach().cpu().numpy()
-        sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
-
-        log_dict["sasv_eer_eval"] = sasv_eer
-        log_dict["sv_eer_eval"] = sv_eer
-        log_dict["spf_eer_eval"] = spf_eer
-
-        self.log_dict(log_dict)
-        self.test_step_outputs.clear()
-
-
+        if stage in ("fit", "validate") or stage is None:
+            module = import_module("dataloaders." + self.config.dataloader)
+            self.ds_func_trn = getattr(module, "get_trnset")
+            self.ds_func_dev = getattr(module, "get_dev_evalset")
+        elif stage == "test":
+            module = import_module("dataloaders." + self.config.dataloader)
+            self.ds_func_eval = getattr(module, "get_dev_evalset")
+        else:
+            raise NotImplementedError(".....")
+        
     def configure_optimizers(self):
-        # ... (Phần này bạn đã làm đúng, giữ nguyên)
         if self.config.optimizer.lower() == "adam":
             optimizer = torch.optim.Adam(
                 params=self.parameters(),
@@ -179,7 +107,7 @@ class System(pl.LightningModule):
                 factor=self.config.optim.factor,
                 patience=self.config.optim.patience,
                 min_lr=self.config.optim.min_lr,
-                verbose=True,
+                # verbose=True,
             )
             return {
                 "optimizer": optimizer,
@@ -207,22 +135,50 @@ class System(pl.LightningModule):
 
         else:
             raise NotImplementedError(".....")
-
-
-    def setup(self, stage=None):
-        self.load_meta_information()
-        self.load_embeddings()
-
-        if stage in ("fit", "validate") or stage is None:
-            module = import_module("dataloaders." + self.config.dataloader)
-            self.ds_func_trn = getattr(module, "get_trnset")
-            self.ds_func_dev = getattr(module, "get_dev_evalset")
-        elif stage == "test":
-            module = import_module("dataloaders." + self.config.dataloader)
-            self.ds_func_eval = getattr(module, "get_dev_evalset")
+    
+    def configure_loss(self):
+        if self.config.loss.lower() == "bce":
+            self.loss = F.binary_cross_entropy_with_logits
+        if self.config.loss.lower() == "cce":
+            self.loss = torch.nn.CrossEntropyLoss(
+                weight=torch.FloatTensor(self.config.loss_weight)
+            )
         else:
-            raise NotImplementedError(".....")
+            raise NotImplementedError("!")
+        
+    def load_meta_information(self):
+        with open(self.config.dirs.spk_meta + "spk_meta_trn.pk", "rb") as f:
+            self.spk_meta_trn = pk.load(f)
+        with open(self.config.dirs.spk_meta + "spk_meta_dev.pk", "rb") as f:
+            self.spk_meta_dev = pk.load(f)
+        with open(self.config.dirs.spk_meta + "spk_meta_eval.pk", "rb") as f:
+            self.spk_meta_eval = pk.load(f)
+        with open(self.config.dirs.spk_meta + "spk_meta_public_test.pk", "rb") as f:
+            self.spk_meta_public_test = pk.load(f) 
+            
+    def load_embeddings(self):
+        # load saved countermeasures(CM) related preparations
+        with open(self.config.dirs.embedding + "cm_embd_trn.pk", "rb") as f:
+            self.cm_embd_trn = pk.load(f)
+        with open(self.config.dirs.embedding + "cm_embd_dev.pk", "rb") as f:
+            self.cm_embd_dev = pk.load(f)
+        with open(self.config.dirs.embedding + "cm_embd_eval.pk", "rb") as f:
+            self.cm_embd_eval = pk.load(f)
+        with open(self.config.dirs.embedding + "cm_embd_public_test.pk", "rb") as f:
+            self.cm_embd_public_test = pk.load(f)
 
+        # load saved automatic speaker verification(ASV) related preparations
+        with open(self.config.dirs.embedding + "asv_embd_trn.pk", "rb") as f:
+            self.asv_embd_trn = pk.load(f)
+        with open(self.config.dirs.embedding + "asv_embd_dev.pk", "rb") as f:
+            self.asv_embd_dev = pk.load(f)
+        with open(self.config.dirs.embedding + "asv_embd_eval.pk", "rb") as f:
+            self.asv_embd_eval = pk.load(f)
+        with open(self.config.dirs.embedding + "asv_embd_public_test.pk", "rb") as f:
+            self.asv_embd_public_test = pk.load(f)
+    
+    # ========== 2. Dataloader ==========
+    
     def train_dataloader(self):
         self.train_ds = self.ds_func_trn(self.cm_embd_trn, self.asv_embd_trn, self.spk_meta_trn)
         return DataLoader(
@@ -237,7 +193,6 @@ class System(pl.LightningModule):
         with open(self.config.dirs.sasv_dev_trial, "r") as f:
             sasv_dev_trial = f.readlines()
         
-        # SỬA LẠI HOÀN CHỈNH Ở ĐÂY
         self.dev_ds = self.ds_func_dev(
             sasv_dev_trial, self.cm_embd_dev, self.asv_embd_dev
         )
@@ -254,7 +209,6 @@ class System(pl.LightningModule):
         with open(self.config.dirs.sasv_eval_trial, "r") as f:
             sasv_eval_trial = f.readlines()
 
-        # SỬA LẠI HOÀN CHỈNH Ở ĐÂY
         self.eval_ds = self.ds_func_eval(
             sasv_eval_trial, self.cm_embd_eval, self.asv_embd_eval
         )
@@ -267,40 +221,91 @@ class System(pl.LightningModule):
             collate_fn=collate_fn
         )
 
-    def configure_loss(self):
-        # ... (Phần này bạn đã làm đúng, giữ nguyên)
-        if self.config.loss.lower() == "bce":
-            self.loss = F.binary_cross_entropy_with_logits
-        if self.config.loss.lower() == "cce":
-            self.loss = torch.nn.CrossEntropyLoss(
-                weight=torch.FloatTensor(self.config.loss_weight)
-            )
-        else:
-            raise NotImplementedError("!")
+    # ========== 3. Training ==========
+    
+    def training_step(self, batch, batch_idx):
+        if batch[0] is None:
+            return None
+            
+        embd_asv_enrol, embd_asv_test, embd_cm_test, label = batch
+        pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
+        loss = self.loss(pred, label)
+        self.log(
+            "trn_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
+        )
+        return loss
+    
+    # ========== 4. Validation ==========
+    
+    def validation_step(self, batch, batch_idx):
+        if batch[0] is None:
+            return None
+            
+        embd_asv_enrol, embd_asv_test, embd_cm_test, key = batch
+        pred = self.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
+        pred = torch.softmax(pred, dim=-1)
+        output = {"pred": pred, "key": key}
+        self.validation_step_outputs.append(output)
+        return output
 
-    def load_meta_information(self):
-        # ... (Phần này bạn đã làm đúng, giữ nguyên)
-        with open(self.config.dirs.spk_meta + "spk_meta_trn.pk", "rb") as f:
-            self.spk_meta_trn = pk.load(f)
-        with open(self.config.dirs.spk_meta + "spk_meta_dev.pk", "rb") as f:
-            self.spk_meta_dev = pk.load(f)
-        with open(self.config.dirs.spk_meta + "spk_meta_eval.pk", "rb") as f:
-            self.spk_meta_eval = pk.load(f)
+    def on_validation_epoch_end(self):
+        if not self.validation_step_outputs:
+            print("Cảnh báo: Không có output nào trong vòng validation để xử lý.")
+            return
 
+        log_dict = {}
+        preds, keys = [], []
+        for output in self.validation_step_outputs:
+            preds.append(output["pred"])
+            keys.extend(list(output["key"]))
 
-    def load_embeddings(self):
-        # load saved countermeasures(CM) related preparations
-        with open(self.config.dirs.embedding + "cm_embd_trn.pk", "rb") as f:
-            self.cm_embd_trn = pk.load(f)
-        with open(self.config.dirs.embedding + "cm_embd_dev.pk", "rb") as f:
-            self.cm_embd_dev = pk.load(f)
-        with open(self.config.dirs.embedding + "cm_embd_eval.pk", "rb") as f:
-            self.cm_embd_eval = pk.load(f)
+        preds = torch.cat(preds, dim=0)[:, 1].detach().cpu().numpy()
+        sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
 
-        # load saved automatic speaker verification(ASV) related preparations
-        with open(self.config.dirs.embedding + "asv_embd_trn.pk", "rb") as f:
-            self.asv_embd_trn = pk.load(f)
-        with open(self.config.dirs.embedding + "asv_embd_dev.pk", "rb") as f:
-            self.asv_embd_dev = pk.load(f)
-        with open(self.config.dirs.embedding + "asv_embd_eval.pk", "rb") as f:
-            self.asv_embd_eval = pk.load(f)
+        log_dict["sasv_eer_dev"] = sasv_eer
+        log_dict["sv_eer_dev"] = sv_eer
+        log_dict["spf_eer_dev"] = spf_eer
+
+        self.log_dict(log_dict)
+        self.validation_step_outputs.clear()
+
+    # ========== 5. Testing ==========
+    
+    def test_step(self, batch, batch_idx):
+        if batch[0] is None:
+            return None
+            
+        # Tái sử dụng logic của validation_step
+        res_dict = self.validation_step(batch, batch_idx)
+        if res_dict:
+            # Ghi đè list lưu trữ để không bị lẫn lộn
+            self.validation_step_outputs.pop() # Xóa output vừa được thêm bởi validation_step
+            self.test_step_outputs.append(res_dict)
+        return res_dict
+
+    def on_test_epoch_end(self):
+        if not self.test_step_outputs:
+            print("Cảnh báo: Không có output nào trong vòng test để xử lý.")
+            return
+
+        log_dict = {}
+        preds, keys = [], []
+        for output in self.test_step_outputs:
+            preds.append(output["pred"])
+            keys.extend(list(output["key"]))
+
+        preds = torch.cat(preds, dim=0)[:, 1].detach().cpu().numpy()
+        sasv_eer, sv_eer, spf_eer = get_all_EERs(preds=preds, keys=keys)
+
+        log_dict["sasv_eer_eval"] = sasv_eer
+        log_dict["sv_eer_eval"] = sv_eer
+        log_dict["spf_eer_eval"] = spf_eer
+
+        self.log_dict(log_dict)
+        self.test_step_outputs.clear()
+

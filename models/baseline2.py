@@ -1,12 +1,12 @@
-import math
 import torch
+import torch.nn as nn
 
-class Model(torch.nn.Module):
+class Model(nn.Module):
     def __init__(self, model_config):
 
         super().__init__()
         self.enh_DNN = self._make_layers(model_config['code_dim'], model_config['dnn_l_nodes'])
-        self.fc_out = torch.nn.Linear(model_config['dnn_l_nodes'][-1], 2, bias = False)
+        self.fc_out = nn.Linear(model_config['dnn_l_nodes'][-1], 2, bias = False)
 
     def forward(self, embd_asv_enr, embd_asv_tst, embd_cm):    
 
@@ -23,10 +23,8 @@ class Model(torch.nn.Module):
         l_fc = []
         for idx in range(len(l_nodes)):
             if idx == 0:
-                l_fc.append(torch.nn.Linear(in_features = in_dim,
-                    out_features = l_nodes[idx]))
+                l_fc.append(nn.Linear(in_dim, l_nodes[idx]))
             else:
-                l_fc.append(torch.nn.Linear(in_features = l_nodes[idx-1],
-                    out_features = l_nodes[idx]))
-            l_fc.append(torch.nn.LeakyReLU(negative_slope = 0.3))
-        return torch.nn.Sequential(*l_fc)
+                l_fc.append(nn.Linear(l_nodes[idx-1], l_nodes[idx]))
+            l_fc.append(nn.LeakyReLU(negative_slope = 0.3))
+        return nn.Sequential(*l_fc)
