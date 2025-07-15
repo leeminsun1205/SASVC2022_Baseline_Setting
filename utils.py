@@ -162,6 +162,7 @@ def generate_spk_meta(config) -> None:
     d_spk_train = get_spkdic(config.dirs.cm_trn_list)
     d_spk_dev = get_spkdic(config.dirs.cm_dev_list)
     d_spk_eval = get_spkdic(config.dirs.cm_eval_list)
+
     os.makedirs(config.dirs.spk_meta, exist_ok=True)
 
     with open(config.dirs.spk_meta + "spk_meta_trn.pk", "wb") as f:
