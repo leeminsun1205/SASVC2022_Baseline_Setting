@@ -195,7 +195,8 @@ def generate_submission(system, trial_path: str, output_path: str):
     # Đọc danh sách trial (không nhãn)
     with open(trial_path, "r") as f:
         trials = [line.strip() for line in f if line.strip()]
-
+    print("▶️ Số dòng trong trial:", len(trials))
+    print("▶️ Ví dụ trial:", trials[:5])
     # Tạo dataset và dataloader
     dataset = SASV_SubmissionSet(trials, system.cm_embd_public_test, system.asv_embd_public_test)
     loader = DataLoader(
