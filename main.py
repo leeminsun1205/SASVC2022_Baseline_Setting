@@ -170,10 +170,9 @@ def main(args):
     elif args.action == "test":
         if args.checkpoint_path is None:
             raise ValueError("Vui lòng cung cấp --checkpoint_path khi chạy submit.")
-        # Load model từ checkpoint (không chạy test_dataloader)
+
         system = _system.load_from_checkpoint(args.checkpoint_path, config=config)
 
-        # Gọi setup để system.ds_func_eval sẵn sàng (nếu generate_submission cần dùng)
         system.setup(stage="test")
 
         # Load embedding public test (chỉ khi generate_submission cần)

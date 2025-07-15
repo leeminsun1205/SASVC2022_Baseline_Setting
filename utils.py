@@ -186,10 +186,17 @@ def get_unique_files_from_trial(trial_file: str) -> list:
     return list(unique_files)
 
 def generate_submission(system, trial_path: str, output_path: str):
+    import torch
+    import os
+    from torch.utils.data import DataLoader
+    from tqdm import tqdm
+    from dataloaders.backend_fusion import collate_fn  # đảm bảo bạn đã import collate_fn
 
+    # Đọc danh sách trial (không nhãn)
     with open(trial_path, "r") as f:
         trials = [line.strip() for line in f if line.strip()]
 
+    # Tạo dataset và dataloader
     dataset = system.ds_func_eval(trials, system.cm_embd_public_test, system.asv_embd_public_test)
     loader = DataLoader(
         dataset,
@@ -200,24 +207,38 @@ def generate_submission(system, trial_path: str, output_path: str):
         collate_fn=collate_fn
     )
 
+    # Đảm bảo hệ thống ở chế độ eval
     system.eval()
     results = []
 
+    # Lấy thiết bị của model
+    device = next(system.model.parameters()).device
+
     with torch.no_grad():
-        for batch in loader:
+        for batch in tqdm(loader, desc="🔮 Đang tạo dự đoán"):
             if batch[0] is None:
                 continue
             embd_asv_enrol, embd_asv_test, embd_cm_test, keys = batch
+
+            # Đưa tất cả input về đúng device
+            embd_asv_enrol = embd_asv_enrol.to(device)
+            embd_asv_test = embd_asv_test.to(device)
+            embd_cm_test = embd_cm_test.to(device)
+
+            # Dự đoán
             pred = system.model(embd_asv_enrol, embd_asv_test, embd_cm_test)
             pred = torch.softmax(pred, dim=-1)[:, 1].detach().cpu().numpy()
 
+            # Ghi kết quả
             for key, score in zip(keys, pred):
-                enr, tst = key.split(" ")  
+                enr, tst = key.split(" ")
                 results.append(f"{enr}\t{tst}\t{score:.5f}")
 
+    # Ghi file kết quả
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w") as f:
         f.write("enrollment_wav\ttest_wav\tscore\n")  # header
         f.write("\n".join(results) + "\n")
 
     print(f"✅ Submission saved to {output_path} with {len(results)} entries.")
+
